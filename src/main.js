@@ -56,6 +56,20 @@ function serverOrigin() {
   }
 }
 
+/**
+ * Absolute path to the bundled window icon.
+ *
+ * Linux desktops prefer the icon from the matched .desktop entry, but they can
+ * only match a window to an entry when StartupWMClass equals the window's
+ * WM_CLASS. When that lookup fails the window falls back to _NET_WM_ICON, and
+ * Electron does not set that property unless an icon is supplied explicitly —
+ * which is why an unmatched window shows a generic placeholder. Setting it here
+ * guarantees a real icon either way.
+ *
+ * macOS ignores this and uses the icon from the application bundle.
+ */
+const WINDOW_ICON = path.join(__dirname, 'assets', 'icon.png');
+
 /* -------------------------------------------------------------------------- */
 /* Window hardening                                                           */
 /* -------------------------------------------------------------------------- */
@@ -149,6 +163,7 @@ function createSetupWindow() {
     height: 420,
     resizable: false,
     title: 'Connect to Leantime',
+    icon: WINDOW_ICON,
     autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -179,6 +194,7 @@ function createMainWindow() {
     minWidth: 900,
     minHeight: 600,
     title: 'Leantime',
+    icon: WINDOW_ICON,
     backgroundColor: '#f2f3f8',
     autoHideMenuBar: false,
     webPreferences: {
