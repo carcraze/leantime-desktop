@@ -114,16 +114,37 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm test
-      - run: npx electron-builder --mac --publish never
+
+      # An unset GitHub secret expands to an empty string. Passing CSC_LINK=""
+      # makes electron-builder resolve it as a certificate path and fail with
+      # "<projectDir> not a file", so signing env vars are only exported when a
+      # certificate is actually configured. Without one we disable identity
+      # auto-discovery and produce an unsigned build on purpose.
+      - name: Detect signing configuration
+        id: signing
+        run: |
+          if [ -n "${{ secrets.MAC_CSC_LINK }}" ]; then
+            echo "signed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "signed=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::No macOS signing certificate configured - producing an unsigned build that Gatekeeper will block on first launch."
+          fi
+
+      - name: Build (signed)
+        if: steps.signing.outputs.signed == 'true'
+        run: npx electron-builder --mac --publish never
         env:
-          # Unset secrets produce an unsigned build, which Gatekeeper will block
-          # on first launch. Signing + notarisation needs a paid Apple Developer
-          # account. See README "Signing".
           CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+
+      - name: Build (unsigned)
+        if: steps.signing.outputs.signed != 'true'
+        run: npx electron-builder --mac --publish never
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
       - uses: actions/upload-artifact@v4
         with:
           name: macos-artifacts

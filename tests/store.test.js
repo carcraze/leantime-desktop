@@ -100,7 +100,11 @@ test('loadConfig falls back to defaults on corrupt JSON', () => {
   assert.equal(config.serverUrl, '');
 });
 
-test('config file is written with owner-only permissions', () => {
+test('config file is written with owner-only permissions', {
+  // Windows has no POSIX mode bits: NTFS uses ACLs and Node reports 0o666
+  // regardless of what was requested, so this assertion is POSIX-only.
+  skip: process.platform === 'win32' ? 'POSIX mode bits are not supported on Windows' : false,
+}, () => {
   saveConfig({ ...DEFAULTS, serverUrl: 'https://b.example' });
   const mode = fs.statSync(path.join(USER_DATA, 'config.json')).mode & 0o777;
   assert.equal(mode, 0o600);
