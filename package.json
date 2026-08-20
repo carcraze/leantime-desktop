@@ -1,7 +1,7 @@
 {
   "name": "leantime-desktop",
   "productName": "Leantime Desktop",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "Unofficial desktop client for Leantime project management",
   "main": "src/main.js",
   "//desktopName": "Must equal the WM_CLASS Electron reports. Under X11 that is derived from the executable name (leantime-desktop), while on Wayland it is the app_id. Using the same value for both makes the .desktop filename, StartupWMClass, app_id and WM_CLASS all agree, which is what lets the desktop environment match a running window to its launcher icon.",

@@ -24,7 +24,50 @@ require.cache[stubPath].filename = stubPath;
 require.cache[stubPath].loaded = true;
 require.cache[stubPath].exports = electronStub;
 
-const { normaliseServerUrl, loadConfig, saveConfig, DEFAULTS } = require('../src/store.js');
+const { normaliseServerUrl, loadConfig, saveConfig, identifyLeantime, DEFAULTS } = require('../src/store.js');
+
+/* ---------------------------------------------------------------------- */
+/* identifyLeantime                                                        */
+/* ---------------------------------------------------------------------- */
+
+// Captured from a real Leantime 3.9.8 login page.
+const REAL_BODY = '<link href="https://example.com/dist/css/main.3.9.8.min.css" rel="stylesheet">';
+const REAL_CSP = "default-src 'self';img-src * 'self' *.leantime.io *.amazonaws.com data: blob:;";
+
+test('identifyLeantime detects a real instance and extracts the version', () => {
+  const r = identifyLeantime({ status: 200, body: REAL_BODY, csp: REAL_CSP });
+  assert.equal(r.ok, true);
+  assert.equal(r.version, '3.9.8');
+  assert.equal(r.signal, 'asset-version');
+});
+
+test('identifyLeantime falls back to the CSP marker when assets are absent', () => {
+  const r = identifyLeantime({ status: 200, body: '<html></html>', csp: REAL_CSP });
+  assert.equal(r.ok, true);
+  assert.equal(r.version, null);
+  assert.equal(r.signal, 'csp');
+});
+
+test('identifyLeantime does not rely on the configurable site name', () => {
+  // A renamed instance (LEAN_SITENAME) must still be accepted.
+  const body = REAL_BODY.replace('main.3.9.8', 'main.3.9.8');
+  const r = identifyLeantime({ status: 200, body: '<title>Acme Projects</title>' + body, csp: '' });
+  assert.equal(r.ok, true);
+  assert.equal(r.version, '3.9.8');
+});
+
+test('identifyLeantime rejects an unrelated website', () => {
+  const r = identifyLeantime({ status: 200, body: '<html><h1>My blog</h1></html>', csp: "default-src 'self'" });
+  assert.equal(r.ok, false);
+  assert.equal(r.reason, 'not-leantime');
+});
+
+test('identifyLeantime reports auth-gated and failing servers distinctly', () => {
+  assert.equal(identifyLeantime({ status: 401, body: '' }).reason, 'auth-required');
+  assert.equal(identifyLeantime({ status: 403, body: '' }).reason, 'auth-required');
+  assert.equal(identifyLeantime({ status: 502, body: '' }).reason, 'server-error');
+  assert.equal(identifyLeantime({ status: 404, body: '' }).reason, 'unexpected-status');
+});
 
 test('normaliseServerUrl adds https when the scheme is omitted', () => {
   const result = normaliseServerUrl('leantime.example.com');

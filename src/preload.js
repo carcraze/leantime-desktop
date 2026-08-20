@@ -8,5 +8,6 @@ const { contextBridge, ipcRenderer } = require('electron');
  */
 contextBridge.exposeInMainWorld('leantimeSetup', {
   getConfig: () => ipcRenderer.invoke('config:get'),
+  testServer: (url) => ipcRenderer.invoke('config:testServer', String(url)),
   setServer: (url) => ipcRenderer.invoke('config:setServer', String(url)),
 });

@@ -38,9 +38,25 @@ npm ci
 npm start
 ```
 
-On first launch the app asks for your server address. It accepts a bare host
-(`leantime.example.com`, assumed https), an explicit scheme, a non-standard port,
-and subfolder installs (`https://example.com/leantime`).
+On first launch the app asks where your Leantime lives, offering two choices:
+
+* **Self-hosted** — your own server. Accepts a bare host
+  (`leantime.example.com`, https assumed), an explicit scheme, an IP address with
+  a port (`http://192.168.1.50:8080`), or a subfolder install
+  (`https://example.com/leantime`).
+* **Leantime Cloud** — enter just your workspace name and it builds
+  `https://<workspace>.leantime.io`.
+
+Either way the address is **verified before it is saved**, so a typo or an
+unrelated website is caught immediately rather than leaving you staring at a
+broken window. Press **Test connection** to check without saving; on success it
+reports the detected Leantime version.
+
+Verification does not rely on the page title, because `LEAN_SITENAME` is
+configurable and a renamed instance would fail. It looks for Leantime's
+versioned asset paths (`/dist/css/main.<version>.min.css`) and its
+Content-Security-Policy allowlist, neither of which users change. Servers older
+than 3.5.0 are rejected with a clear message.
 
 To change servers later: **File → Change Server…**
 

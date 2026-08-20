@@ -9,9 +9,10 @@ const {
   dialog,
   ipcMain,
   session,
+  net,
 } = require('electron');
 
-const { loadConfig, saveConfig, normaliseServerUrl } = require('./store');
+const { loadConfig, saveConfig, normaliseServerUrl, identifyLeantime } = require('./store');
 
 const IS_DEV = process.argv.includes('--dev');
 
@@ -69,6 +70,94 @@ function serverOrigin() {
  * macOS ignores this and uses the icon from the application bundle.
  */
 const WINDOW_ICON = path.join(__dirname, 'assets', 'icon.png');
+
+/* -------------------------------------------------------------------------- */
+/* Server verification                                                        */
+/* -------------------------------------------------------------------------- */
+
+/** Oldest Leantime release this client is known to work against. */
+const MINIMUM_VERSION = '3.5.0';
+
+function isVersionBelow(version, minimum) {
+  const a = version.split('.').map(Number);
+  const b = minimum.split('.').map(Number);
+  for (let i = 0; i < 3; i += 1) {
+    if ((a[i] || 0) < (b[i] || 0)) return true;
+    if ((a[i] || 0) > (b[i] || 0)) return false;
+  }
+  return false;
+}
+
+/**
+ * Probes a candidate address to confirm a real Leantime server is listening,
+ * so a typo or an unrelated website is caught before it is saved.
+ *
+ * Uses Electron's net stack rather than global fetch so it honours the same
+ * proxy settings and certificate policy as the app window.
+ *
+ * @param {string} baseUrl already normalised
+ * @returns {Promise<{ok: boolean, version?: string|null, error?: string}>}
+ */
+async function verifyServer(baseUrl) {
+  const target = `${baseUrl}/auth/login`;
+
+  let response;
+  try {
+    response = await net.fetch(target, {
+      method: 'GET',
+      redirect: 'follow',
+      // Cloud Run and similar platforms cold-start, so allow a generous window.
+      signal: AbortSignal.timeout(30_000),
+    });
+  } catch (err) {
+    const message = String(err?.message || err);
+    if (/ERR_CERT|certificate/i.test(message)) {
+      return {
+        ok: false,
+        error: 'The server\'s security certificate could not be verified. If this is a local server with a self-signed certificate, enable allowInsecureCerts in the config file.',
+      };
+    }
+    if (/ERR_NAME_NOT_RESOLVED|getaddrinfo/i.test(message)) {
+      return { ok: false, error: 'That address could not be found. Check the spelling.' };
+    }
+    if (/timed out|AbortError|ERR_TIMED_OUT/i.test(message)) {
+      return { ok: false, error: 'The server did not respond in time. It may be asleep or unreachable.' };
+    }
+    if (/ERR_CONNECTION_REFUSED/i.test(message)) {
+      return { ok: false, error: 'Connection refused. Is Leantime running on that address and port?' };
+    }
+    return { ok: false, error: `Could not reach the server (${message}).` };
+  }
+
+  const body = await response.text().catch(() => '');
+  const result = identifyLeantime({
+    status: response.status,
+    body,
+    csp: response.headers.get('content-security-policy') || '',
+  });
+
+  if (!result.ok) {
+    switch (result.reason) {
+      case 'auth-required':
+        return { ok: false, error: 'The server answered but requires authentication before Leantime is reachable (for example a proxy login). This client cannot pass that.' };
+      case 'server-error':
+        return { ok: false, error: `The server returned an error (HTTP ${response.status}). Leantime may be starting up or misconfigured.` };
+      case 'unexpected-status':
+        return { ok: false, error: `Unexpected response (HTTP ${response.status}). Check the address, including any subfolder.` };
+      default:
+        return { ok: false, error: 'That address responded, but it does not look like a Leantime server.' };
+    }
+  }
+
+  if (result.version && isVersionBelow(result.version, MINIMUM_VERSION)) {
+    return {
+      ok: false,
+      error: `That server runs Leantime ${result.version}. This client needs ${MINIMUM_VERSION} or newer.`,
+    };
+  }
+
+  return { ok: true, version: result.version };
+}
 
 /* -------------------------------------------------------------------------- */
 /* Window hardening                                                           */
@@ -354,10 +443,28 @@ function buildMenu() {
 
 ipcMain.handle('config:get', () => ({ serverUrl: config.serverUrl }));
 
-ipcMain.handle('config:setServer', (event, rawUrl) => {
+/** Validates and probes an address without saving it. */
+ipcMain.handle('config:testServer', async (event, rawUrl) => {
+  const parsed = normaliseServerUrl(rawUrl);
+  if (!parsed.ok) {
+    return parsed;
+  }
+  const probe = await verifyServer(parsed.url);
+  return probe.ok
+    ? { ok: true, url: parsed.url, version: probe.version }
+    : { ok: false, error: probe.error };
+});
+
+ipcMain.handle('config:setServer', async (event, rawUrl) => {
   const result = normaliseServerUrl(rawUrl);
   if (!result.ok) {
     return result;
+  }
+
+  // Never persist an address we could not confirm is a Leantime server.
+  const probe = await verifyServer(result.url);
+  if (!probe.ok) {
+    return { ok: false, error: probe.error };
   }
 
   const changed = result.url !== config.serverUrl;

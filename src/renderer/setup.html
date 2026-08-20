@@ -10,82 +10,123 @@
     * { box-sizing: border-box; }
     body {
       font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-      margin: 0;
-      padding: 32px;
-      background: Canvas;
-      color: CanvasText;
-      font-size: 14px;
-      line-height: 1.5;
+      margin: 0; padding: 28px 32px;
+      background: Canvas; color: CanvasText;
+      font-size: 14px; line-height: 1.5;
     }
-    h1 { font-size: 20px; margin: 0 0 8px; }
-    p.intro { margin: 0 0 24px; opacity: 0.8; }
-    label { display: block; font-weight: 600; margin-bottom: 6px; }
-    input[type="url"] {
-      width: 100%;
+    h1 { font-size: 19px; margin: 0 0 6px; }
+    p.intro { margin: 0 0 20px; opacity: 0.8; }
+
+    fieldset { border: 0; margin: 0 0 18px; padding: 0; }
+    legend { font-weight: 600; padding: 0 0 8px; }
+
+    .choice { display: flex; gap: 10px; }
+    .choice label {
+      flex: 1; display: block; cursor: pointer;
+      border: 1px solid GrayText; border-radius: 8px;
       padding: 10px 12px;
-      font-size: 15px;
-      border: 1px solid GrayText;
-      border-radius: 6px;
-      background: Field;
-      color: FieldText;
     }
-    input[type="url"]:focus-visible {
-      outline: 2px solid Highlight;
-      outline-offset: 1px;
+    .choice input[type="radio"] { margin-right: 6px; }
+    .choice label:has(input:checked) {
+      border-color: Highlight;
+      box-shadow: inset 0 0 0 1px Highlight;
     }
-    .hint { font-size: 12px; opacity: 0.7; margin-top: 6px; }
-    .error {
-      margin-top: 12px;
-      padding: 10px 12px;
-      border-radius: 6px;
-      border: 1px solid #b3261e;
-      color: #b3261e;
-      background: rgba(179, 38, 30, 0.08);
+    .choice label:focus-within { outline: 2px solid Highlight; outline-offset: 1px; }
+    .choice .t { font-weight: 600; }
+    .choice .d { display: block; font-size: 12px; opacity: 0.75; margin-top: 2px; }
+
+    label.field { display: block; font-weight: 600; margin-bottom: 6px; }
+    .row { display: flex; align-items: stretch; }
+    .row .prefix, .row .suffix {
+      display: flex; align-items: center; padding: 0 8px;
+      border: 1px solid GrayText; background: Canvas;
+      opacity: 0.75; font-size: 13px; white-space: nowrap;
     }
-    .error:empty { display: none; }
-    .actions { margin-top: 24px; display: flex; gap: 12px; justify-content: flex-end; }
+    .row .prefix { border-right: 0; border-radius: 6px 0 0 6px; }
+    .row .suffix { border-left: 0; border-radius: 0 6px 6px 0; }
+    input[type="text"], input[type="url"] {
+      flex: 1; min-width: 0;
+      padding: 10px 12px; font-size: 15px;
+      border: 1px solid GrayText; border-radius: 6px;
+      background: Field; color: FieldText;
+    }
+    .row input { border-radius: 0; }
+    input:focus-visible { outline: 2px solid Highlight; outline-offset: 1px; position: relative; z-index: 1; }
+
+    .hint { font-size: 12px; opacity: 0.7; margin: 6px 0 0; }
+    .msg { margin-top: 12px; padding: 10px 12px; border-radius: 6px; }
+    .msg:empty { display: none; }
+    .msg.error { border: 1px solid #b3261e; color: #b3261e; background: rgba(179,38,30,.08); }
+    .msg.ok { border: 1px solid #1b6b3a; color: #1b6b3a; background: rgba(27,107,58,.08); }
+
+    .actions { margin-top: 22px; display: flex; gap: 10px; justify-content: flex-end; align-items: center; }
     button {
-      padding: 10px 18px;
-      font-size: 14px;
-      font-weight: 600;
-      border-radius: 6px;
-      border: 1px solid transparent;
-      background: Highlight;
-      color: HighlightText;
-      cursor: pointer;
+      padding: 10px 18px; font-size: 14px; font-weight: 600;
+      border-radius: 6px; border: 1px solid transparent;
+      background: Highlight; color: HighlightText; cursor: pointer;
     }
+    button.secondary { background: transparent; color: CanvasText; border-color: GrayText; }
     button:focus-visible { outline: 2px solid CanvasText; outline-offset: 2px; }
     button[disabled] { opacity: 0.6; cursor: default; }
+    a { color: LinkText; }
+    [hidden] { display: none !important; }
   </style>
 </head>
 <body>
   <main>
-    <h1>Connect to your Leantime server</h1>
-    <p class="intro">
-      This client needs the web address of a running Leantime installation &mdash;
-      self&#8209;hosted, or your leantime.io cloud workspace.
-    </p>
+    <h1>Connect to Leantime</h1>
+    <p class="intro">This client works with any Leantime server. Choose where yours lives.</p>
 
     <form id="setup-form" novalidate>
-      <label for="server-url">Server address</label>
-      <input
-        id="server-url"
-        name="server-url"
-        type="url"
-        inputmode="url"
-        autocomplete="url"
-        spellcheck="false"
-        placeholder="https://leantime.example.com"
-        aria-describedby="server-url-hint server-url-error"
-        required
-      />
-      <p class="hint" id="server-url-hint">
-        Subfolder installs are supported, e.g. https://example.com/leantime
-      </p>
+      <fieldset>
+        <legend id="mode-legend">Where is your Leantime?</legend>
+        <div class="choice" role="radiogroup" aria-labelledby="mode-legend">
+          <label>
+            <input type="radio" name="mode" value="self" checked />
+            <span class="t">Self-hosted</span>
+            <span class="d">Your own server, VPS, container or LAN machine</span>
+          </label>
+          <label>
+            <input type="radio" name="mode" value="cloud" />
+            <span class="t">Leantime Cloud</span>
+            <span class="d">A workspace on leantime.io</span>
+          </label>
+        </div>
+      </fieldset>
 
-      <p class="error" id="server-url-error" role="alert" aria-live="assertive"></p>
+      <!-- Self-hosted -->
+      <div id="pane-self">
+        <label class="field" for="server-url">Server address</label>
+        <input id="server-url" name="server-url" type="url" inputmode="url"
+               autocomplete="url" spellcheck="false"
+               placeholder="https://leantime.example.com"
+               aria-describedby="self-hint" />
+        <p class="hint" id="self-hint">
+          A domain, an IP address with port (<code>http://192.168.1.50:8080</code>),
+          or a subfolder install (<code>https://example.com/leantime</code>).
+        </p>
+      </div>
+
+      <!-- Cloud -->
+      <div id="pane-cloud" hidden>
+        <label class="field" for="workspace">Workspace name</label>
+        <div class="row">
+          <span class="prefix" aria-hidden="true">https://</span>
+          <input id="workspace" name="workspace" type="text" spellcheck="false"
+                 autocapitalize="none" placeholder="yourcompany"
+                 aria-describedby="cloud-hint" />
+          <span class="suffix" aria-hidden="true">.leantime.io</span>
+        </div>
+        <p class="hint" id="cloud-hint">
+          The subdomain you sign in at. Don't have one?
+          <a href="https://leantime.io/pricing/" id="pricing-link">See Leantime Cloud plans</a>.
+        </p>
+      </div>
+
+      <p class="msg" id="message" role="alert" aria-live="assertive"></p>
 
       <div class="actions">
+        <button type="button" class="secondary" id="test">Test connection</button>
         <button type="submit" id="submit">Connect</button>
       </div>
     </form>

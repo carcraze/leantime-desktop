@@ -82,4 +82,52 @@ function normaliseServerUrl(input) {
   return { ok: true, url, origin: parsed.origin };
 }
 
-module.exports = { loadConfig, saveConfig, normaliseServerUrl, configPath, DEFAULTS };
+/**
+ * Decides whether an HTTP response looks like a real Leantime installation.
+ *
+ * Deliberately avoids the page title and site name, because LEAN_SITENAME is
+ * user-configurable and a renamed instance would fail. Instead it relies on two
+ * markers that Leantime emits regardless of configuration:
+ *
+ *  1. Versioned asset paths, e.g. /dist/css/main.3.9.8.min.css — this also
+ *     yields the version, so the caller can warn about unsupported releases.
+ *  2. The Content-Security-Policy header, which hardcodes *.leantime.io in
+ *     img-src.
+ *
+ * A third fallback is the /api/jsonrpc endpoint answering {"error":"Unauthorized"}.
+ *
+ * @param {{status: number, body: string, csp?: string}} response
+ * @returns {{ok: true, version: string|null, signal: string} | {ok: false, reason: string}}
+ */
+function identifyLeantime({ status, body = '', csp = '' }) {
+  if (status === 401 || status === 403) {
+    // Reachable but gated by an external proxy or auth layer.
+    return { ok: false, reason: 'auth-required' };
+  }
+  if (status >= 500) {
+    return { ok: false, reason: 'server-error' };
+  }
+  if (status !== 200) {
+    return { ok: false, reason: 'unexpected-status' };
+  }
+
+  // Marker 1: versioned asset path, which also carries the version number.
+  const asset = body.match(/\/dist\/(?:css|js)\/[a-z-]*?\.?(\d+\.\d+\.\d+)\.min\.(?:css|js)/i);
+  if (asset) {
+    return { ok: true, version: asset[1], signal: 'asset-version' };
+  }
+
+  // Marker 2: Leantime's own CSP allowlist.
+  if (/img-src[^;]*\*\.leantime\.io/i.test(csp)) {
+    return { ok: true, version: null, signal: 'csp' };
+  }
+
+  // Marker 3: an unversioned dist path still indicates Leantime's asset layout.
+  if (/\/dist\/(?:css|js)\/[^"']*\.min\.(?:css|js)/i.test(body)) {
+    return { ok: true, version: null, signal: 'asset-path' };
+  }
+
+  return { ok: false, reason: 'not-leantime' };
+}
+
+module.exports = { loadConfig, saveConfig, normaliseServerUrl, identifyLeantime, configPath, DEFAULTS };
