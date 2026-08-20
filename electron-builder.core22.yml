@@ -1,0 +1,51 @@
+# Fallback snap configuration: base core22.
+#
+# Why this exists
+# ---------------
+# The default config (electron-builder.yml) targets `base: core24`, which drives
+# the real snapcraft CLI and therefore needs an isolated build environment (LXD or
+# Multipass). That is the right long-term target — it brings the gnome extension,
+# the gpu-2404 graphics stack and first-class Wayland.
+#
+# core22 takes a different code path: when `stagePackages` is left at its default,
+# electron-builder assembles the snap from a prebuilt Electron template using its
+# own `app-builder-bin` helper. No snapcraft, no LXD, no root required. That makes
+# this the config to use when:
+#
+#   * LXD networking is blocked (e.g. Docker sets the FORWARD policy to drop), or
+#   * you are building on a machine where you cannot install snapcraft.
+#
+# Build with:
+#   npm run dist:snap:core22
+#
+# Do NOT add entries to stagePackages here: doing so disables the template path
+# and pulls snapcraft/LXD back in as a requirement.
+
+extends: ./electron-builder.yml
+
+linux:
+  target:
+    - target: snap
+      arch: [x64, arm64]
+
+snapcraft:
+  base: core22
+  core22:
+    summary: Desktop client for Leantime project management
+    confinement: strict
+    grade: stable
+    # core22 disables native Wayland by default for older-Electron compatibility.
+    # Electron 38 handles Wayland fine, so opt in; snapd falls back to XWayland
+    # on compositors that do not support it.
+    allowNativeWayland: true
+    # Extra interfaces beyond the template defaults. The template already grants
+    # desktop, desktop-legacy, home, x11, wayland, unity7, browser-support,
+    # network, gsettings, audio-playback, pulseaudio and opengl.
+    plugs:
+      - default
+      - removable-media   # attach files from USB drives
+      - audio-record      # Leantime screen + webcam recording
+      - camera            # Leantime webcam recording
+    appPartStage:
+      - -usr/share/doc
+      - -usr/share/man

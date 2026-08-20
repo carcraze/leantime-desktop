@@ -1,0 +1,134 @@
+appId: io.github.leantimedesktop.app
+productName: Leantime Desktop
+copyright: Leantime Desktop contributors
+
+directories:
+  output: dist
+  buildResources: build
+
+files:
+  - src/**/*
+  - package.json
+  - "!**/*.map"
+
+# ---------------------------------------------------------------------------
+# Linux
+# ---------------------------------------------------------------------------
+linux:
+  category: Office;ProjectManagement
+  synopsis: Desktop client for Leantime project management
+  description: >
+    An unofficial desktop client for Leantime, the open source project
+    management system. Connects to any self-hosted or cloud Leantime server.
+  # Installs the .desktop file as ${desktopName}.desktop and sets StartupWMClass
+  # to match Electron's app_id, so GNOME/KDE can associate the window with the
+  # launcher (taskbar grouping, dock badges). Required in v26; always-on in v27.
+  syncDesktopName: true
+  desktop:
+    entry:
+      Keywords: project;management;kanban;gantt;tasks;
+  target:
+    - target: snap
+      arch: [x64, arm64]
+    - target: AppImage
+      arch: [x64, arm64]
+    - target: deb
+      arch: [x64, arm64]
+
+# Snap configuration uses the modern `snapcraft` key (the flat `snap` key is
+# deprecated in electron-builder 26 and removed in 27).
+#
+# base core24 = Ubuntu 24.04. Requires Electron 25+ (we ship 38) and gives
+# first-class Wayland plus the `gnome` extension, which pulls in the gnome-46-2404
+# platform snap and the gpu-2404 GPU userspace stack. `extensions` is deliberately
+# left unset so that default applies: setting it to [] would make us responsible
+# for declaring layouts and content snaps by hand.
+snapcraft:
+  base: core24
+  core24:
+    summary: Desktop client for Leantime project management
+    confinement: strict
+    grade: stable
+    # Only the interfaces actually needed. The Snap Store review process is
+    # slowed by superfluous plugs, and core24's gnome extension already injects
+    # browser-support / desktop / desktop-legacy / wayland / x11 / opengl.
+    plugs:
+      - default              # electron-builder's standard Electron plug set
+      - home                 # attach files from the user's home directory
+      - removable-media      # attach files from USB drives
+      - audio-playback       # notification sounds, media in comments
+      - audio-record         # Leantime screen + webcam recording
+      - camera               # Leantime webcam recording
+    # "default" extends electron-builder's defaults rather than replacing them.
+    # libv4l-0 is needed for webcam capture inside strict confinement.
+    stagePackages:
+      - default
+      - libv4l-0
+    # Trim documentation from the snap payload.
+    appPartStage:
+      - -usr/share/doc
+      - -usr/share/man
+    # LXD is container-based and needs no nested virtualisation, which makes it
+    # the reliable choice on GitHub Actions runners. Override locally with
+    # useMultipass if you prefer a VM.
+    useLXD: true
+    # If a user reports a GPU/compositor crash under native Wayland, flipping
+    # forceX11 to true routes the app through XWayland instead.
+    forceX11: false
+
+appImage:
+  artifactName: ${productName}-${version}-${arch}.${ext}
+
+deb:
+  # Matches the documented dependency set for Electron apps on Debian-based
+  # distros. libuuid1 and libsecret-1-0 are required by Chromium/keyring paths.
+  depends:
+    - libgtk-3-0
+    - libnotify4
+    - libnss3
+    - libxss1
+    - libxtst6
+    - xdg-utils
+    - libatspi2.0-0
+    - libuuid1
+    - libsecret-1-0
+  recommends:
+    - libappindicator3-1
+  packageCategory: utils
+  priority: optional
+
+# ---------------------------------------------------------------------------
+# Windows
+# ---------------------------------------------------------------------------
+win:
+  target:
+    - target: nsis
+      arch: [x64, arm64]
+  # Set CSC_LINK / CSC_KEY_PASSWORD in CI to sign. Unsigned builds trigger
+  # SmartScreen warnings on first run.
+  signAndEditExecutable: true
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+
+# ---------------------------------------------------------------------------
+# macOS
+# ---------------------------------------------------------------------------
+mac:
+  category: public.app-category.productivity
+  target:
+    - target: dmg
+      arch: [x64, arm64]
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  entitlementsInherit: build/entitlements.mac.plist
+  extendInfo:
+    NSCameraUsageDescription: Leantime uses the camera for webcam recordings.
+    NSMicrophoneUsageDescription: Leantime uses the microphone for screen and webcam recordings.
+
+dmg:
+  artifactName: ${productName}-${version}-${arch}.${ext}

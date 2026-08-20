@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'none'; style-src 'unsafe-inline'; script-src 'self';" />
+  <title>Connect to Leantime</title>
+  <style>
+    :root { color-scheme: light dark; }
+    * { box-sizing: border-box; }
+    body {
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      margin: 0;
+      padding: 32px;
+      background: Canvas;
+      color: CanvasText;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+    h1 { font-size: 20px; margin: 0 0 8px; }
+    p.intro { margin: 0 0 24px; opacity: 0.8; }
+    label { display: block; font-weight: 600; margin-bottom: 6px; }
+    input[type="url"] {
+      width: 100%;
+      padding: 10px 12px;
+      font-size: 15px;
+      border: 1px solid GrayText;
+      border-radius: 6px;
+      background: Field;
+      color: FieldText;
+    }
+    input[type="url"]:focus-visible {
+      outline: 2px solid Highlight;
+      outline-offset: 1px;
+    }
+    .hint { font-size: 12px; opacity: 0.7; margin-top: 6px; }
+    .error {
+      margin-top: 12px;
+      padding: 10px 12px;
+      border-radius: 6px;
+      border: 1px solid #b3261e;
+      color: #b3261e;
+      background: rgba(179, 38, 30, 0.08);
+    }
+    .error:empty { display: none; }
+    .actions { margin-top: 24px; display: flex; gap: 12px; justify-content: flex-end; }
+    button {
+      padding: 10px 18px;
+      font-size: 14px;
+      font-weight: 600;
+      border-radius: 6px;
+      border: 1px solid transparent;
+      background: Highlight;
+      color: HighlightText;
+      cursor: pointer;
+    }
+    button:focus-visible { outline: 2px solid CanvasText; outline-offset: 2px; }
+    button[disabled] { opacity: 0.6; cursor: default; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Connect to your Leantime server</h1>
+    <p class="intro">
+      This client needs the web address of a running Leantime installation &mdash;
+      self&#8209;hosted, or your leantime.io cloud workspace.
+    </p>
+
+    <form id="setup-form" novalidate>
+      <label for="server-url">Server address</label>
+      <input
+        id="server-url"
+        name="server-url"
+        type="url"
+        inputmode="url"
+        autocomplete="url"
+        spellcheck="false"
+        placeholder="https://leantime.example.com"
+        aria-describedby="server-url-hint server-url-error"
+        required
+      />
+      <p class="hint" id="server-url-hint">
+        Subfolder installs are supported, e.g. https://example.com/leantime
+      </p>
+
+      <p class="error" id="server-url-error" role="alert" aria-live="assertive"></p>
+
+      <div class="actions">
+        <button type="submit" id="submit">Connect</button>
+      </div>
+    </form>
+  </main>
+
+  <script src="setup.js"></script>
+</body>
+</html>

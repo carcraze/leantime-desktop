@@ -1,0 +1,44 @@
+# Local Leantime server used to smoke-test this client against a real backend.
+# The image tag is kept in step with upstream.json -> leantimeUpstream.testedVersion,
+# which the monthly Watch Leantime Upstream workflow bumps.
+#
+#   docker compose -f tests/fixtures/docker-compose.leantime.yml up -d
+#   xdg-open http://localhost:8099/install
+#
+# Credentials here are throwaway values for a disposable local container.
+
+services:
+  leantime_db:
+    image: mysql:8.4
+    command: --character-set-server=UTF8MB4 --collation-server=UTF8MB4_unicode_ci
+    environment:
+      MYSQL_ROOT_PASSWORD: test_root_pw
+      MYSQL_DATABASE: leantime
+      MYSQL_USER: leantime
+      MYSQL_PASSWORD: test_pw
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-ptest_root_pw"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    networks: [leantime-test]
+
+  leantime:
+    image: leantime/leantime:3.9.8
+    environment:
+      LEAN_DB_HOST: leantime_db
+      LEAN_DB_USER: leantime
+      LEAN_DB_PASSWORD: test_pw
+      LEAN_DB_DATABASE: leantime
+      LEAN_EMAIL_RETURN: test@local.local
+      LEAN_APP_URL: http://localhost:8099
+      LEAN_SESSION_SECURE: "false"
+    ports:
+      - "8099:8080"
+    depends_on:
+      leantime_db:
+        condition: service_healthy
+    networks: [leantime-test]
+
+networks:
+  leantime-test:

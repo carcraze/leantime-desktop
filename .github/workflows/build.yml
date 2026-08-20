@@ -1,0 +1,174 @@
+name: Build & Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  # -------------------------------------------------------------------------
+  # Linux: AppImage + deb. Fast, no snapcraft needed.
+  # -------------------------------------------------------------------------
+  linux:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+      - run: npm run lint
+      - run: npm test
+
+      # The integration test launches a real Electron window, so CI needs a
+      # virtual display.
+      - name: Integration test
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends xvfb
+          xvfb-run --auto-servernum npm run test:integration
+
+      - run: npx electron-builder --linux AppImage deb --publish never
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-artifacts
+          path: |
+            dist/*.AppImage
+            dist/*.deb
+          if-no-files-found: error
+
+  # -------------------------------------------------------------------------
+  # Snap. Uses base core22, which electron-builder assembles from a prebuilt
+  # Electron template via app-builder-bin - no snapcraft and no LXD needed, so
+  # this job stays fast and cannot be broken by LXD/Docker firewall conflicts.
+  # To ship core24 instead, install snapcraft + LXD here and drop the --config.
+  # -------------------------------------------------------------------------
+  snap:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Build snap
+        run: npx electron-builder --linux snap --config electron-builder.core22.yml --publish never
+
+      - name: Verify snap metadata
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends squashfs-tools
+          for s in dist/*.snap; do
+            echo "--- $s ---"
+            unsquashfs -q -d /tmp/snapmeta "$s" meta >/dev/null
+            grep -E '^(name|version|base|grade|confinement):' /tmp/snapmeta/meta/snap.yaml
+            grep -q '^confinement: strict' /tmp/snapmeta/meta/snap.yaml \
+              || { echo "::error::snap is not strictly confined"; exit 1; }
+            rm -rf /tmp/snapmeta
+          done
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: snap-artifacts
+          path: dist/*.snap
+          if-no-files-found: error
+
+  # -------------------------------------------------------------------------
+  # Windows and macOS
+  # -------------------------------------------------------------------------
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npx electron-builder --win --publish never
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-artifacts
+          path: |
+            dist/*.exe
+            dist/*.blockmap
+          if-no-files-found: error
+
+  macos:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npx electron-builder --mac --publish never
+        env:
+          # Unset secrets produce an unsigned build, which Gatekeeper will block
+          # on first launch. Signing + notarisation needs a paid Apple Developer
+          # account. See README "Signing".
+          CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-artifacts
+          path: dist/*.dmg
+          if-no-files-found: error
+
+  # -------------------------------------------------------------------------
+  # Publish
+  # -------------------------------------------------------------------------
+  github-release:
+    needs: [linux, snap, windows, macos]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/**
+          generate_release_notes: true
+
+  snap-store:
+    needs: snap
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: snap-artifacts
+          path: dist
+
+      - name: Upload to Snap Store
+        # SNAPCRAFT_STORE_CREDENTIALS is the plain macaroon from:
+        #   snapcraft export-login -
+        # Ref: https://www.electron.build/docs/snap#publishing-to-the-snap-store
+        env:
+          SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAPCRAFT_STORE_CREDENTIALS }}
+        run: |
+          if [ -z "$SNAPCRAFT_STORE_CREDENTIALS" ]; then
+            echo "::warning::SNAPCRAFT_STORE_CREDENTIALS not set - skipping Snap Store upload."
+            exit 0
+          fi
+          sudo snap install snapcraft --classic
+          for s in dist/*.snap; do
+            snapcraft upload --release=stable "$s"
+          done

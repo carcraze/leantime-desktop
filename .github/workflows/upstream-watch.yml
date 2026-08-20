@@ -1,0 +1,75 @@
+name: Watch Leantime Upstream
+
+# Monthly check for a new upstream Leantime release. Because this client is a thin
+# shell around a remote Leantime server, a new upstream release does not require a
+# code change here — it only matters for the compatibility metadata and for
+# triggering a refreshed build. The job records the newest upstream tag and opens
+# a PR when it differs from what is tracked.
+
+on:
+  schedule:
+    # 06:00 UTC on the 1st of every month.
+    - cron: '0 6 1 * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  check-upstream:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve latest upstream release
+        id: upstream
+        run: |
+          set -euo pipefail
+          latest=$(curl -fsSL \
+            -H "Accept: application/vnd.github+json" \
+            https://api.github.com/repos/Leantime/leantime/releases/latest \
+            | jq -r '.tag_name')
+
+          if [ -z "$latest" ] || [ "$latest" = "null" ]; then
+            echo "Could not resolve upstream release tag" >&2
+            exit 1
+          fi
+
+          tracked=$(jq -r '.leantimeUpstream.testedVersion // ""' upstream.json)
+
+          echo "latest=$latest"   >> "$GITHUB_OUTPUT"
+          echo "tracked=$tracked" >> "$GITHUB_OUTPUT"
+          if [ "$latest" != "$tracked" ]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Update tracked version
+        if: steps.upstream.outputs.changed == 'true'
+        run: |
+          set -euo pipefail
+          jq --arg v "${{ steps.upstream.outputs.latest }}" \
+             --arg d "$(date -u +%Y-%m-%d)" \
+             '.leantimeUpstream.testedVersion = $v | .leantimeUpstream.checkedAt = $d' \
+             upstream.json > upstream.json.tmp
+          mv upstream.json.tmp upstream.json
+
+      - name: Open pull request
+        if: steps.upstream.outputs.changed == 'true'
+        uses: peter-evans/create-pull-request@v6
+        with:
+          branch: chore/upstream-${{ steps.upstream.outputs.latest }}
+          title: 'chore: track Leantime ${{ steps.upstream.outputs.latest }}'
+          commit-message: 'chore: track Leantime ${{ steps.upstream.outputs.latest }}'
+          body: |
+            Upstream Leantime published **${{ steps.upstream.outputs.latest }}**
+            (previously tracked: `${{ steps.upstream.outputs.tracked }}`).
+
+            Checklist before merging:
+            - [ ] Smoke test the client against a server running ${{ steps.upstream.outputs.latest }}
+            - [ ] Confirm login, Kanban board, timeline, editor and file upload still work
+            - [ ] Confirm SSO flow (if configured) still completes
+            - [ ] Tag a release to publish refreshed Snap / AppImage / deb / exe / dmg
+          labels: upstream
