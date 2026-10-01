@@ -1,9 +1,9 @@
 {
   "leantimeUpstream": {
     "repository": "https://github.com/Leantime/leantime",
-    "testedVersion": "v3.9.8",
+    "testedVersion": "v3.10.0",
     "minimumVersion": "v3.5.0",
-    "checkedAt": "2026-08-20",
+    "checkedAt": "2026-10-01",
     "note": "This client is a remote shell. It does not vendor Leantime source, so upstream releases require no code change here - only a compatibility smoke test and a refreshed build."
   }
 }
